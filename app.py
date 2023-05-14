@@ -1,11 +1,11 @@
 from flask import Flask, request
-from winfobot import WinfoBot
+from aigent import AIGent
 import logging
 import os
 import json
 
 app = Flask(__name__)
-winfo_bot = WinfoBot()
+winfo_bot = AIGent()
 
 @app.route('/')
 def home():

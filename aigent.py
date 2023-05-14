@@ -11,7 +11,7 @@ load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-class WinfoBot:
+class AIGent:
     def __init__(self):
         user_data = self.get_random_user_data()
         self.user_data = user_data
