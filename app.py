@@ -1,25 +1,21 @@
-from flask import Flask, request, render_template
-from aigent import AIGent
+from flask import Flask, request
+from winfobot import WinfoBot
 import logging
 import os
 import json
-from dotenv import load_dotenv
-from flask_cors import CORS
-import openai
-import requests
 
 app = Flask(__name__)
-agent = AIGent()
+winfo_bot = WinfoBot()
 
 @app.route('/')
 def home():
-    return render_template('index.html')  # Assuming you have a template named index.html
+    return "WinfoBot is up and running!"  # Return a simple string to indicate that the bot is running
 
-@app.route('/chat', methods=['POST'])
+@app.route('/winfo', methods=['POST'])
 def chat():
-    user_message = request.form['message']
-    agent_message = agent.chat(user_message)
-    return {'message': f"{agent.name_first}: {agent_message}"}
+    user_message = request.json['content']
+    bot_message = winfo_bot.chat(user_message)
+    return {'message': f"{winfo_bot.name_first}: {bot_message}"}
 
 @app.route('/logs', methods=['GET'])
 def list_logs():
@@ -31,7 +27,6 @@ def get_log(log_file):
     with open(f'path/to/your/log/directory/{log_file}', 'r') as file:
         log_content = file.readlines()
     return {'log_content': log_content}
-
 
 if __name__ == '__main__':
     # Get the absolute path of the current directory
