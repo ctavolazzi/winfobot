@@ -1,0 +1,70 @@
+body {
+  font-family: 'Helvetica Neue', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #fafafa;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+#chat {
+  width: 40%;
+  height: 70%;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  position: relative;
+  background-color: #fff;
+}
+
+#messages {
+  height: 80%;
+  padding: 20px;
+  overflow-y: scroll;
+  border-bottom: 1px solid #ddd;
+}
+
+#messages p {
+  padding: 10px 20px;
+  margin: 10px 0;
+  border-radius: 20px;
+  max-width: 80%;
+  line-height: 1.5;
+}
+
+#messages p:nth-child(even) {
+  background: #007BFF;
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 0;
+}
+
+#messages p:nth-child(odd) {
+  background: #e9e9eb;
+  color: black;
+  align-self: flex-start;
+  border-bottom-left-radius: 0;
+}
+
+#input {
+  padding: 10px 20px;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+
+#send {
+  position: absolute;
+  bottom: 10px;
+  right: 20px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  color: white;
+  background: linear-gradient(135deg, #007BFF 0%, #22D1EE 100%);
+  cursor: pointer;
+  font-size: 16px;
+}
+
