@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 import uuid
 import json
+from message_utils import format_message
 
 load_dotenv()
 
