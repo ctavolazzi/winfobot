@@ -1,9 +1,13 @@
 import time
 from bot import Bot
 from port import Port
+import utils
 
 class TestBot(Bot):
     def __init__(self, bot_instance=None):
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+
         if bot_instance:
             self.bot_instance = bot_instance
         else:

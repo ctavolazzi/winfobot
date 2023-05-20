@@ -5,50 +5,41 @@ from port import Port
 from state import State
 from memory import Memory
 import datetime
-from utils import setup_logger
+import utils
 import random
 import string
-# from haikunator import Haikunator # for generating random names but the import isn't working
+from brain import Brain
 
 class Bot:
-    """
-    The Bot class represents a bot with the ability to communicate via a port.
-
-    Attributes:
-    id (str): a unique identifier for the bot.
-    port (Port): a Port object for the bot to communicate through.
-    """
-
     def __init__(self, config=None):
-        self.run_default_config() # Always run this first
+        self.run_default_config()
+        self.logger = utils.setup_logger(self, 'DEBUG')
 
         if config:
-            self.run_config(config) # Run the config if it exists
+            self.run_config(config)
 
         self.state = State() if not hasattr(self, 'state') else self.state
         self.memory = Memory() if not hasattr(self, 'memory') else self.memory
-
-        self.logger = setup_logger(self, 'DEBUG')
-        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+        self.brain = Brain() if not hasattr(self, 'brain') else self.brain
 
         self.port = Port({'owner': self}) if not hasattr(self, 'port') else self.port
         self.lock = threading.Lock()
 
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+
     def run_default_config(self):
-        # Set default values for the bot
         self.id = str(uuid.uuid4())
         self.name = self.generate_name()
         self.type = self.__class__.__name__
-        self.config = {'id': self.id, 'name': self.name, 'type': self.type}
         self._base_type = self.__class__.__name__
         self._created_at = datetime.datetime.now()
         self._updated_at = datetime.datetime.now()
         self._parent_id = None
-        self._restricted_config_keys = {'id', 'port', 'state', 'memory', 'logger', 'lock'} # These keys cannot be changed
+        self._restricted_config_keys = {'id', 'port', 'state', 'memory', 'logger', 'lock'}
 
     def run_config(self, config):
         for key, value in config.items():
-            if key not in self._restricted_config_keys and not key.startswith('_'): # Skip these attributes
+            if key not in self._restricted_config_keys and not key.startswith('_'):
                 if callable(value):
                     setattr(self, key, value(self))
                 else:
@@ -64,8 +55,7 @@ class Bot:
 
     def attempt_connection(self, port):
         if isinstance(port, Port):
-            # logic for handling port connections
-            pass
+            self.port.connect(port)
         else:
             raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
 
@@ -93,6 +83,48 @@ class Bot:
     def identify(self):
        pprint.pprint(self.__dict__)
 
+    def send(self, data, destination):
+        if isinstance(destination, Port):
+            self.port.send(data, destination)
+        else:
+            raise TypeError("Data destination should be an instance of Port")
+
+    def receive(self, data, source):
+        # Define a lookup table for handling different data types
+        lookup_table = {
+            str: self._handle_string,
+            dict: self._handle_dict,
+            list: self._handle_list,
+        }
+
+        # Get the type of the data
+        data_type = type(data)
+
+        # Check if there's a function to handle this type of data
+        if data_type in lookup_table:
+            # If there is, call the appropriate function
+            lookup_table[data_type](data, source)
+        else:
+            # If there's no function for this data type, log a warning
+            self.logger.warning(f"Cannot process data of type {data_type.__name__}")
+
+    # Define the functions for parsing different types of data
+    def _handle_string(self, data, source):
+        # Here you might do something with the data...
+        # then echo back to source
+        source.port.send(self, data)
+
+    def _handle_dict(self, data, source):
+        # Here you might do something with the data...
+        # then echo back to source
+        source.port.send(self, data)
+
+    def _handle_list(self, data, source):
+        # Here you might do something with the data...
+        # then echo back to source
+        source.port.send(self, data)
+    ...
+
     def __iter__(self):
         for attr, value in self.__dict__.items():
             yield attr, value
@@ -101,6 +133,7 @@ class Bot:
         attributes = vars(self)
         lines = [f'Bot {self.id}']
         for attr, value in attributes.items():
+
             if attr.startswith('_') or attr in {'logger'}:  # Skip these attributes
                 continue
             elif attr in {'port', 'state', 'memory'}:  # Use repr(value) for detailed information
@@ -110,46 +143,36 @@ class Bot:
             lines.append(f'{attr}: {value}')
         return '\n'.join(lines)
 
-
     def __str__(self):
         return f'Bot {self.id} \n Port {self.port.get_address()} \n State: {self.state} \n Config: {self.config} \n Connections: {self.port.connections} \n Memory: {self.memory} \n Lock: {self.lock} \n Logger: {self.logger} \n '
 
 def main():
-    # Create a new bot with default settings
     bot1 = Bot()
     print(f"Created new Bot with ID: {bot1.id}")
 
-    # Test Port creation and owner setting
     assert bot1.port.id != None, "Bot's Port ID should not be None."
     assert bot1.port.owner.id == bot1.id, "Bot's Port owner should be the same as Bot's ID."
 
-    # Test if changing the owner of Port is restricted
     try:
         bot1.port.owner = Bot()
     except AttributeError:
         print("Successfully restricted Port's owner from being changed.")
 
-    # Test Port's address
     assert isinstance(bot1.port.address, str), "Bot's Port address should be a string."
 
-    # Test Bot's memory
     bot1.remember("item1")
     assert any(item.data == "item1" for item in bot1.memory.get_memory()['working_memory']), "Bot's memory should contain the remembered item."
 
-
-    # Test Bot's state
     assert isinstance(bot1.state, State), "Bot's state should be an instance of State."
     bot1.state.update({"name": "NewState"})
     assert bot1.state.state_dict['name'] == "NewState", "Bot's state should update correctly."
 
-    # Test Bot's connections
     assert isinstance(bot1.port.connections, set), "Bot's connections should be a set."
     bot2 = Bot()
-    bot1.port.connect(bot2.port)
+    bot1.attempt_connection(bot2.port)
     assert bot2.port in bot1.port.connections, "Bot's connections should include the connected port."
 
-    # Test Bot's disconnection
-    bot1.port.disconnect(bot2.port)
+    bot1.disconnect(bot2.port)
     assert bot2.port not in bot1.port.connections, "Bot's connections should not include the disconnected port."
 
 if __name__ == '__main__':

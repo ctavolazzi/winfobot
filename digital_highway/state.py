@@ -1,18 +1,27 @@
 import uuid
-from utils import setup_logger
+import utils
 
 class State:
     def __init__(self, config=None):
-        self.id = str(uuid.uuid4())
-        self.state_dict = config if config else {}
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
 
         if config:
-            for key, value in config.items():
-                self.state_dict[key] = value
+            self.run_config(config) # Run the config if it exists
 
-        # Initialize the logger
-        self.logger = setup_logger(self)
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+
+    def run_default_config(self):
+        # Set default values for the State
+        self.id = str(uuid.uuid4())
+        self.state_dict = {}
+        self._restricted_config_keys = {'id', 'logger'} # These keys cannot be changed
+
+    def run_config(self, config):
+        for key, value in config.items():
+            if key not in self._restricted_config_keys and not key.startswith('_'): # Skip these attributes
+                self.state_dict[key] = value
+        self.logger.info(f"Updated config for {self.__class__.__name__} {self.id} with {config}")
 
     def get_state(self):
         return self.state_dict
@@ -47,6 +56,8 @@ class State:
         # Update the state dictionary
         self.state_dict.update(valid_dict)
         self.logger.info(f'Updated state: {valid_dict}')
+
+    # ... continue with the rest of your class definition ...
 
     def __iter__(self):
         for attr, value in self.__dict__.items():

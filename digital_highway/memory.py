@@ -1,27 +1,40 @@
 import uuid
-from utils import setup_logger
+import utils
 
 class MemoryItem:
     def __init__(self, data):
-        self.id = str(uuid.uuid4())
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
         self.data = data
+
+    def run_default_config(self):
+        self.id = str(uuid.uuid4())
 
     def __repr__(self):
         return f'MemoryItem(id={self.id}, data={self.data})'
 
-
 class Memory:
     def __init__(self, config=None):
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+
+        if config:
+            self.run_config(config) # Run the config if it exists
+
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+
+    def run_default_config(self):
         self.id = str(uuid.uuid4())
         self.working_memory = []
         self.short_term = []
         self.long_term = []
-        if config:
-            for key, value in config.items():
-                setattr(self, key, value)
+        self._restricted_config_keys = {'id', 'logger'} # These keys cannot be changed
 
-        # Initialize the logger
-        self.logger = setup_logger(self)
+    def run_config(self, config):
+        for key, value in config.items():
+            if key not in self._restricted_config_keys and not key.startswith('_'): # Skip these attributes
+                setattr(self, key, value)
+        self.logger.info(f"Updated config for {self.__class__.__name__} {self.id} with {config}")
 
     def get_memory(self):
         return {'working_memory': self.working_memory, 'short_term': self.short_term, 'long_term': self.long_term}
