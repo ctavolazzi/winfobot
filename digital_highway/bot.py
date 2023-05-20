@@ -89,24 +89,8 @@ class Bot:
         else:
             raise TypeError("Data destination should be an instance of Port")
 
-    def receive(self, data, source):
-        # Define a lookup table for handling different data types
-        lookup_table = {
-            str: self._handle_string,
-            dict: self._handle_dict,
-            list: self._handle_list,
-        }
-
-        # Get the type of the data
-        data_type = type(data)
-
-        # Check if there's a function to handle this type of data
-        if data_type in lookup_table:
-            # If there is, call the appropriate function
-            lookup_table[data_type](data, source)
-        else:
-            # If there's no function for this data type, log a warning
-            self.logger.warning(f"Cannot process data of type {data_type.__name__}")
+    def receive(self, data):
+        print(f"Bot {self.id} received data: {data}")
 
     # Define the functions for parsing different types of data
     def _handle_string(self, data, source):

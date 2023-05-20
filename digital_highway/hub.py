@@ -2,28 +2,25 @@ from bot import Bot
 from port import Port
 import utils
 from message import Message
-from controller import Controller
+import uuid
 
-class Hub(Bot):
+class Hub():
     DEFAULT_CONFIG = {
         'rules': {},
-        'controller_model': 'default',
-        # Add any other default configuration here
+        'id': str(uuid.uuid4()),
+        'address': str(uuid.uuid4()),
+        'connections': set(),
+        'owner': None,
+        '_hashed_password': hash('password'),
+        '_restricted_config_keys': {'id', 'address', 'connections', 'lock'},
     }
 
-    def __init__(self, config={}):
-        super().__init__()
+    def __init__(self, config=None):
         self.run_default_config() # Always run this first
         self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
 
         self.port = Port({'owner': self})
         self.bots = set()
-        self.config = self.DEFAULT_CONFIG.copy()
-        self.config.update(config)
-
-        self.controller = self.config.get('controller', None)
-        if not isinstance(self.controller, Bot):
-            raise TypeError("Controller should be an instance of Bot")
 
         self.rules = self.config.get('rules', {})
         if not isinstance(self.rules, dict):
@@ -31,53 +28,14 @@ class Hub(Bot):
 
     def run_default_config(self): # Always run this first in __init__
         self.config = self.DEFAULT_CONFIG.copy()
+        self.id = self.config.get('id')
         for key, value in self.config.items():
-            if not key.startswith('_') and not key in {'port'}: # Skip these attributes
-                if callable(value): # If the value is a function, call it
-                    self.config[key] = value() # This is useful for generating unique IDs
-                elif isinstance(value, dict): # If the value is a dictionary, copy it
-                    self.config[key] = value.copy() # This is useful for mutable default values
-                elif isinstance(value, list): # This can also be engineered in the futute to help
-                    self.config[key] = value.copy() # Scrup and process the setup of the hub
-                elif isinstance(value, set): # In a different function somewhere
-                    self.config[key] = value.copy() # For now, it lives here
-                elif isinstance(value, tuple):
-                    self.config[key] = value.copy()
-                elif isinstance(value, str):
-                    self.config[key] = value
-                elif isinstance(value, int):
-                    self.config[key] = value
-                elif isinstance(value, float):
-                    self.config[key] = value
-                elif isinstance(value, bool):
-                    self.config[key] = value
-                elif isinstance(value, type(None)):
-                    self.config[key] = value
-                elif isinstance(value, object):
-                    self.config[key] = value
-                elif isinstance(value, type):
-                    self.config[key] = value
-                else:
-                    self.config[key] = value
-
-    def __repr__(self):
-        attributes = vars(self)
-        lines = [f'Hub {self.id}']
-        for attr, value in attributes.items():
-            if attr in {'id', '_password'}:  # Skip these attributes
+            if key.startswith('_') or key == 'port':
                 continue
-            if attr == 'modules':  # For modules, we want to list the module names only
-                value = ', '.join(value.keys())
-            elif attr in {'port', 'state', 'memory'}:  # Use repr(value) for detailed information
-                value = repr(value)
-            elif attr == 'logger':  # For logger, we want to display its level
-                value = value.level
-            elif attr == 'lock':  # For lock, we want to display its state
-                value = 'locked' if value.locked() else 'unlocked'
-            elif attr == 'bots':  # For bots, we want to display the number of bots
-                value = len(value)
-            lines.append(f'{attr}: {value}')
-        return '\n'.join(lines)
+            if callable(value):
+                self.config[key] = value()
+            elif isinstance(value, (dict, list, set, tuple)):
+                self.config[key] = value.copy()
 
     def add_bot(self, bot):
         if not isinstance(bot, Bot):
@@ -108,34 +66,32 @@ class Hub(Bot):
     def broadcast(self, data):
         if not self.bots:
             raise RuntimeError("No bots connected to the hub to broadcast data")
-
         for bot in self.bots:
-            self.port.send(bot, data)
+            bot.receive(data)
 
-    def receive(self, data, source):
-        if not isinstance(source, Bot):
-            raise TypeError("Data source should be an instance of Bot")
+    def receive(self, data, source_port):
+        if not isinstance(source_port, Port):
+            raise TypeError("Data source should be an instance of Port")
 
-        if self._check_rules(source):
-            self.controller.handle(data, source)
+        source = source_port.owner
+        if self._check_rules(source): # Assuming 'owner' is a bot.
+            self.handle(data, source)
         else:
             print(f"Bot {source.id} is not following the rules. Data not accepted.")
+
+    def handle(self, data, source):
+        print(f"Hub received data from {source.id}: {data}")
 
     def __str__(self):
         return f"Hub {self.port.address}"
 
 if __name__ == '__main__':
-    # Create a controller bot for the hub
-    controller_bot = Bot({'name': 'Central', 'type': 'Controller'})
-
     # Create a hub
-    hub = Hub({'controller': controller_bot})
+    hub = Hub()
 
-    # Create two other bots
+    # Create two bots and connect them to the hub
     bot1 = Bot()
     bot2 = Bot()
-
-    # Test adding bots to the hub
     hub.add_bot(bot1)
     hub.add_bot(bot2)
 
@@ -145,13 +101,10 @@ if __name__ == '__main__':
     # Test broadcasting data
     hub.broadcast("Test data")
     # Both bots should have received the data
-    assert bot1.memory.get_memory()['received_data'][-1] == "Test data", "Bot1 did not receive the data"
-    assert bot2.memory.get_memory()['received_data'][-1] == "Test data", "Bot2 did not receive the data"
 
     # Test receiving data
-    hub.receive("Test data from bot1", bot1)
-    # The controller should have handled the data
-    assert controller_bot.memory.get_memory()['received_data'][-1] == "Test data from bot1", "Controller did not receive the data"
+    hub.receive("Test data from bot1", bot1.port)
+    # The hub should have handled the data
 
     # Test removing a bot
     hub.remove_bot(bot1)

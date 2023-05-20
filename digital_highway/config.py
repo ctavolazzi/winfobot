@@ -2,14 +2,21 @@ import datetime
 
 class Config:
     def __init__(self, settings=None):
-        if not isinstance(settings, dict):
+        if settings is None:
+            settings = {}
+        elif not isinstance(settings, dict):
             raise TypeError('settings should be a dictionary')
         self.settings = settings
         self.timestamp = datetime.datetime.now()
 
-    def update_attribute(self, key, value):
-        self.settings[key] = value
+    # ...
+
+    def update(self, updates):
+        if not isinstance(updates, dict):
+            raise TypeError('updates should be a dictionary')
+        self.settings.update(updates)
         self.timestamp = datetime.datetime.now()
+
 
     def __getitem__(self, key):
         try:

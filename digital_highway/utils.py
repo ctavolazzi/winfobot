@@ -1,5 +1,6 @@
 import os
 import logging
+import uuid
 
 def setup_logger(target, level='INFO'):
     # Create logs directory if not exists
@@ -40,3 +41,6 @@ def setup_logger(target, level='INFO'):
     logger.addHandler(f_handler)
 
     return logger
+
+def generate_unique_id():
+    return str(uuid.uuid4())

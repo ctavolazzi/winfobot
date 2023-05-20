@@ -2,10 +2,7 @@ from config import Config
 
 class Brain():
     def __init__(self, config=None):
-        if config:
-          self.config = Config(config)
-        else:
-          self.config = Config()
+        self.config = Config(config if config else {})  # Use an empty dictionary if no configuration is provided
         self.config.update({
           'name': 'Brain',
           'type': 'Brain',
@@ -13,4 +10,4 @@ class Brain():
 
     def think(self, data):
         # Have the brain think about the data
-        pass
+        return data

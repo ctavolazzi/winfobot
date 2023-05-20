@@ -1,6 +1,4 @@
-import asyncio
 from bot import Bot
-import openai
 from brain import Brain
 
 class Central(Bot):
