@@ -2,18 +2,30 @@ import uuid
 import utils
 
 class MemoryItem:
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+    }
+
     def __init__(self, data):
         self.run_default_config() # Always run this first
         self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
         self.data = data
 
     def run_default_config(self):
-        self.id = str(uuid.uuid4())
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
 
-    def __repr__(self):
-        return f'MemoryItem(id={self.id}, data={self.data})'
+    # ... rest of your code ...
 
 class Memory:
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'working_memory': lambda: [],
+        'short_term': lambda: [],
+        'long_term': lambda: [],
+        '_restricted_config_keys': lambda: {'id', 'logger'},
+    }
+
     def __init__(self, config=None):
         self.run_default_config() # Always run this first
         self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
@@ -24,11 +36,8 @@ class Memory:
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
 
     def run_default_config(self):
-        self.id = str(uuid.uuid4())
-        self.working_memory = []
-        self.short_term = []
-        self.long_term = []
-        self._restricted_config_keys = {'id', 'logger'} # These keys cannot be changed
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
 
     def run_config(self, config):
         for key, value in config.items():

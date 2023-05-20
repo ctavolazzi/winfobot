@@ -3,129 +3,121 @@ import utils
 import threading
 from message import Message
 
+class Handler:
+    @staticmethod
+    def can_handle(type):
+        raise NotImplementedError("This method should be overridden in subclass")
+
+    def handle(self, data):
+        raise NotImplementedError("This method should be overridden in subclass")
+
+
+class CommandHandler(Handler):
+    @staticmethod
+    def can_handle(type):
+        return type == 'Command'
+
+    def handle(self, data):
+        command = data['content']['command']
+        if command == 'someCommand':
+            pass  # Do something...
+
+
+class DataHandler(Handler):
+    @staticmethod
+    def can_handle(type):
+        return type == 'Data'
+
+    def handle(self, data):
+        payload = data['content']
+        # Do something with payload...
+
+
 class Port:
+    _REQUIRED_CONFIG_KEYS = ['id', 'address', 'logger', 'lock', 'handlers']
+
+    _DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'address': lambda: str(uuid.uuid4()),
+        'connections': lambda: set(),
+        '_owner': lambda: None,
+        '_manager': lambda: None,
+        '_hashed_password': lambda: hash('password'),
+        '_restricted_config_keys': lambda: {'id', 'address', 'connections', 'lock'},
+        'logger': lambda: utils.setup_logger('Port', 'DEBUG'),
+        'lock': lambda: threading.Lock(),
+        'handlers': lambda: [
+            CommandHandler(),
+            DataHandler(),
+            # add more handlers here as you define them
+            ],
+        'is_connected': lambda: False,
+        'is_open': lambda: False,
+        'is_locked': lambda: False,
+        'is_running': lambda: False,
+    }
+
     def __init__(self, config=None):
-        self.run_default_config() # Always run this first
-        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+        self.initialize()
+        # ... rest of your existing code
 
-        if config and 'owner' in config:
-            self._owner = config['owner']  # Set the owner at initialization
-            del config['owner']
-        if config:
-            self.run_config(config) # Run the config if it exists
+    def initialize(self):
+        # Set up the port's default config
+        utils.run_config(self, self._DEFAULT_CONFIG)
+        utils.verify_config(self, self._DEFAULT_CONFIG)
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {self._DEFAULT_CONFIG}')
 
-        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+    def handle(self, data):
+        if isinstance(data, Message):
+            data = data.to_dict()
 
-        self.lock = threading.Lock()
+        self.logger.debug(f"Handling data: {data}")
 
-    def run_default_config(self):
-        # Set default values for the port
-        self.id = str(uuid.uuid4())
-        self.address = str(uuid.uuid4())
-        self.connections = set()
-        self._owner = None
-        self._hashed_password = hash('password')
-        self._restricted_config_keys = {'id', 'address', 'connections', 'lock'} # These keys cannot be changed
+        if 'type' not in data:
+            self.logger.error(f"Port {self.address} received data without 'type': {data}")
+            return
 
-    def run_config(self, config):
-        for key, value in config.items():
-            if key not in self._restricted_config_keys and not key.startswith('_'): # Skip these attributes
-                if callable(value):
-                    setattr(self, key, value(self))
-                else:
-                    setattr(self, key, value)
-            else:
-                self.logger.warning(f"Restricted key {key} in Port config. Skipping.")
-
-    @property
-    def owner(self):
-        return self._owner
-
-    @owner.setter
-    def owner(self, value):
-        if self._owner is None:
-            self._owner = value
+        for handler in self.handlers:
+            if handler.can_handle(data['type']):
+                handler.handle(data)
+                break
         else:
-            raise AttributeError("Owner of a port cannot be changed once set.")
-
-    def allow_connection(self, hashed_password):
-        return hashed_password == self._hashed_password
+            self.logger.error(f"Port {self.address} received unknown type: {data['type']}")
 
     def connect(self, target):
         with self.lock:  # Acquire the lock
             if target in self.connections:
-                print(f"{target.__class__.__name__ + ' ' + target.id} is already connected to Port {self.address}")
+                self.logger.error(f"{target.__class__.__name__ + ' ' + target.id} is already connected to Port {self.address}")
             elif target is self.owner:
-                print(f"Cannot connect {target.__class__.__name__ + ' ' + target.id} to Port {self.address}. It is the owner.")
+                self.logger.error(f"Cannot connect {target.__class__.__name__ + ' ' + target.id} to Port {self.address}. It is the owner.")
             elif target is None:
-                print(f"Cannot connect {target.__class__.__name__ + ' ' + target.id} to Port {self.address}. It is None.")
+                self.logger.error(f"Cannot connect None to Port {self.address}.")
             elif target is self:
-                print(f"Cannot connect {target.__class__.__name__ + ' ' + target.id} to Port {self.address}. It is itself.")
-            elif target is not None and self.allow_connection(target._hashed_password):
+                self.logger.error(f"Cannot connect Port {self.address} to itself.")
+            elif target.verify_password(self._hashed_password):
                 self.connections.add(target)
-                print(f"{target.__class__.__name__ + ' ' + target.id} has been connected to Port {self.address}")
+                self.logger.info(f"{target.__class__.__name__ + ' ' + target.id} has been connected to Port {self.address}")
 
     def disconnect(self, target):
         with self.lock:  # Acquire the lock
             if target in self.connections:
                 self.connections.remove(target)
-                print(f"{target.__class__.__name__ + ' ' + target.id} has been disconnected from Port {self.address}")
+                self.logger.info(f"{target.__class__.__name__ + ' ' + target.id} has been disconnected from Port {self.address}")
             else:
-                print(f"{target.__class__.__name__ + ' ' + target.id} is not connected to Port {self.address}")
+                self.logger.error(f"{target.__class__.__name__ + ' ' + target.id} is not connected to Port {self.address}")
 
     def send(self, content, destination):
-        message = Message(self, content, destination)
         if destination in self.connections:
+            message = self.create_message(content, destination)
+            self.owner.memory.remember(message)
             destination.receive(message)
-
-    def receive(self, message):
-        # Process the incoming message object and store its content in the bot's memory
-        if message is not isinstance(message, Message):
-            self.logger.warning(f"Message {message} is not a Message object. It will not be processed.")
-            return
-        # Optionally, further processing can be applied here
-
-        # Then store in owner's memory
-        self.owner.memory.remember(message)
-
-        # And the handle the message
-        self.handle(message)
-
-    def handle(self, data):
-        """
-        This method handles all kinds of data.
-        Messages, Configs, Etc. are all handled by this method. This is the brain of the port.
-        """
-        self.logger.debug(f"Handling data: {data}")
-        if 'type' in data.keys():
-            print(f"Port {self.address} received data of type {data['type']}")
         else:
-            print(f"ERROR: Port {self.address} received data: {data} from {data['sender']} with no type specified.")
+            self.logger.error(f"Cannot send message to unconnected destination {destination.__class__.__name__ + ' ' + destination.id}")
 
-    def get_address(self):
-        return self.address
+    def create_message(self, content, destination):
+        return Message(self, content, destination)
 
-    def __iter__(self):
-        for attr, value in self.__dict__.items():
-            yield attr, value
-
-    def __repr__(self):
-        attributes = vars(self)
-        lines = [f'Port {self.id}']
-        for attr, value in attributes.items():
-            if attr.startswith('_') or attr in {'logger'}:  # Skip these attributes
-                continue
-            if attr == 'connections':  # Use repr(value) for detailed information
-                value = ', '.join([conn.id for conn in value])
-            elif attr == 'owner':  # For owner, we want to display the owner's id and type
-                value = value.type + value.id
-            elif attr == 'lock':
-                value = 'locked' if value.locked() else 'unlocked'
-            lines.append(f'{attr}: {value}')
-        return '\n'.join(lines)
-
-    def __str__(self):
-        return f"Port {self.id} \n Address: {self.address} \n Number of Connections: {len(self.connections)} \n Owner: {self.owner}"
+    # rest of your existing code
 
 def main():
     # Create two ports

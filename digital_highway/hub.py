@@ -5,37 +5,45 @@ from message import Message
 import uuid
 
 class Hub():
+    DEFAULT_CONFIG_SELF = {
+        'type': lambda self: self.__class__.__name__,
+        '_base_type': lambda self: self.__class__.__name__,
+    }
+
     DEFAULT_CONFIG = {
-        'rules': {},
-        'id': str(uuid.uuid4()),
-        'address': str(uuid.uuid4()),
-        'connections': set(),
-        'owner': None,
-        '_hashed_password': hash('password'),
-        '_restricted_config_keys': {'id', 'address', 'connections', 'lock'},
+        'rules': lambda: {},
+        'id': lambda: str(uuid.uuid4()),
+        'address': lambda: str(uuid.uuid4()),
+        'connections': lambda: set(),
+        'owner': lambda: None,
+        '_hashed_password': lambda: hash('password'),
+        '_restricted_config_keys': lambda: {'id', 'address', 'connections', 'lock'},
     }
 
     def __init__(self, config=None):
-        self.run_default_config() # Always run this first
-        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+        self.run_default_config()
+        self.logger = utils.setup_logger(self, 'DEBUG')
 
         self.port = Port({'owner': self})
         self.bots = set()
 
-        self.rules = self.config.get('rules', {})
+        if config:
+            self.run_config(config)
+
         if not isinstance(self.rules, dict):
             raise TypeError("Rules should be a dictionary")
 
-    def run_default_config(self): # Always run this first in __init__
-        self.config = self.DEFAULT_CONFIG.copy()
-        self.id = self.config.get('id')
-        for key, value in self.config.items():
-            if key.startswith('_') or key == 'port':
-                continue
-            if callable(value):
-                self.config[key] = value()
-            elif isinstance(value, (dict, list, set, tuple)):
-                self.config[key] = value.copy()
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+
+    def run_default_config(self):
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            if callable(default_value_func):
+                setattr(self, key, default_value_func())
+
+        for key, default_value_func in self.DEFAULT_CONFIG_SELF.items():
+            setattr(self, key, default_value_func(self))
+
+    # rest of your code ...
 
     def add_bot(self, bot):
         if not isinstance(bot, Bot):

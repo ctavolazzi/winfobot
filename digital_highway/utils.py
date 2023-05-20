@@ -44,3 +44,21 @@ def setup_logger(target, level='INFO'):
 
 def generate_unique_id():
     return str(uuid.uuid4())
+
+def run_config(target, config):
+    # Sets up the target's config - can be used to set up default config or to override it
+    for key, value in config.items():
+        if key not in target._restricted_config_keys and not key.startswith('_'): # Skip these attributes
+            if callable(value):
+                setattr(target, key, value(target))
+            else:
+                setattr(target, key, value)
+        else:
+            target.logger.warning(f"Restricted key {key} in {type(target).__name__} config. Skipping.")
+
+def verify_config(target, config):
+    # Verify that all required keys are present in the config of the target
+    for key in target._required_config_keys:
+        if key not in config:
+            target.logger.error(f"Missing required key {key} in {type(target).__name__} config.")
+            return False

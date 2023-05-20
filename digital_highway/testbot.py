@@ -2,18 +2,41 @@ import time
 from bot import Bot
 from port import Port
 import utils
+import uuid
 
 class TestBot(Bot):
-    def __init__(self, bot_instance=None):
-        self.run_default_config() # Always run this first
-        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'test_results': lambda: [],
+    }
 
+    DEFAULT_CONFIG_SELF = {
+        'type': lambda self: self.__class__.__name__,
+        '_base_type': lambda self: self.__class__.__base__.__name__,
+        'port': lambda self: Port({'owner': self}),
+    }
+
+    def __init__(self, bot_instance=None):
         if bot_instance:
             self.bot_instance = bot_instance
+            super().__init__(self.bot_instance)
         else:
             super().__init__()
             self.bot_instance = self
-        self.test_results = []
+
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+
+    def run_default_config(self):
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
+
+        for key, default_value_func in self.DEFAULT_CONFIG_SELF.items():
+            setattr(self, key, default_value_func(self))
+
+    # rest of your code...
+
+    # rest of your code ...
 
     def _begin_test(self, test_name):
         print(f"Running {test_name}...")

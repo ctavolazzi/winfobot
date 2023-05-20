@@ -4,6 +4,7 @@ import pprint
 from port import Port
 from state import State
 from memory import Memory
+from config import Config
 import datetime
 import utils
 import random
@@ -11,33 +12,44 @@ import string
 from brain import Brain
 
 class Bot:
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'inventory': lambda: {'items': []},
+        '_created_at': lambda: datetime.datetime.now(),
+        '_updated_at': lambda: datetime.datetime.now(),
+        '_parent_id': lambda: None,
+        '_restricted_config_keys': lambda: {'id', 'port', 'state', 'memory', 'logger', 'lock'},
+    }
+
     def __init__(self, config=None):
-        self.run_default_config()
+        self.initialize_default_config()
         self.logger = utils.setup_logger(self, 'DEBUG')
 
-        if config:
-            self.run_config(config)
-
-        self.state = State() if not hasattr(self, 'state') else self.state
-        self.memory = Memory() if not hasattr(self, 'memory') else self.memory
-        self.brain = Brain() if not hasattr(self, 'brain') else self.brain
-
-        self.port = Port({'owner': self}) if not hasattr(self, 'port') else self.port
-        self.lock = threading.Lock()
-
-        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
-
-    def run_default_config(self):
-        self.id = str(uuid.uuid4())
+        # Set up the bot's self referential config
         self.name = self.generate_name()
         self.type = self.__class__.__name__
         self._base_type = self.__class__.__name__
-        self._created_at = datetime.datetime.now()
-        self._updated_at = datetime.datetime.now()
-        self._parent_id = None
-        self._restricted_config_keys = {'id', 'port', 'state', 'memory', 'logger', 'lock'}
 
-    def run_config(self, config):
+        # Bind the bot to its components
+        self.port = Port({'owner': self}) if not hasattr(self, 'port') else self.port
+        self.state = State({'owner': self}) if not hasattr(self, 'state') else self.state
+        self.memory = Memory({'owner': self}) if not hasattr(self, 'memory') else self.memory
+        self.brain = Brain({'owner': self}) if not hasattr(self, 'brain') else self.brain
+
+        # Enable locking for thread safety
+        self.lock = threading.Lock()
+
+        if config:
+            utils.run_config(self, config)
+
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
+
+    # Config methods
+    def initialize_default_config(self):
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
+
+    def update_config(self, config):
         for key, value in config.items():
             if key not in self._restricted_config_keys and not key.startswith('_'):
                 if callable(value):
@@ -47,12 +59,27 @@ class Bot:
             else:
                 self.logger.warning(f"Restricted key {key} in Bot config. Skipping.")
         self._updated_at = datetime.datetime.now()
-        self.config = config
         self.logger.info(f"Updated config for {self.__class__.__name__} {self.id} with {config}")
 
-    def generate_name(self):
-        return self.__class__.__name__ + str(random.choices(string.ascii_lowercase, k=5)) + str(random.randint(1000,9999))
+    # State methods
+    def update_state(self, state):
+        self.state.update(state)
 
+    # Memory methods
+    def remember(self, item):
+        self.memory.remember(item)
+
+    def recall(self, item):
+        return self.memory.recall(item)
+
+    def forget(self, item):
+        self.memory.forget(item)
+
+    # Generator methods
+    def generate_name(self):
+        return self.__class__.__name__ + ''.join(random.choices(string.ascii_lowercase, k=5)) + str(random.randint(1000,9999))
+
+    # Connection methods
     def attempt_connection(self, port):
         if isinstance(port, Port):
             self.port.connect(port)
@@ -65,32 +92,44 @@ class Bot:
         else:
             raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
 
+    # Send and receive methods
+    def send(self, data, destination):
+        if isinstance(destination, Port):
+            destination.receive(data, self.port)
+        else:
+            raise TypeError("Data destination should be an instance of Port")
+
+    def receive(self, data, source_port):
+        if isinstance(source_port, Port):
+            source = source_port.owner
+            print(f"Bot {self.id} received data from {source.id}: {data}")
+            self.handle(data, source)
+        else:
+            raise TypeError("Data source should be an instance of Port")
+
+    # Getters and setters
     def get(self, attribute):
         if hasattr(self, attribute):
             return getattr(self, attribute)
         else:
             raise AttributeError(f"{attribute} not found in bot attributes")
 
-    def remember(self, item):
-        self.memory.remember(item)
-
-    def recall(self, item):
-        return self.memory.recall(item)
-
-    def forget(self, item):
-        self.memory.forget(item)
-
+    # Debugging methods
     def identify(self):
        pprint.pprint(self.__dict__)
 
-    def send(self, data, destination):
-        if isinstance(destination, Port):
-            self.port.send(data, destination)
+    # Handlers
+    def handle(self, data, source):
+        # Here is where you could use your handle_string, handle_dict and handle_list methods.
+        # Just as an example:
+        if isinstance(data, str):
+            self._handle_string(data, source)
+        elif isinstance(data, dict):
+            self._handle_dict(data, source)
+        elif isinstance(data, list):
+            self._handle_list(data, source)
         else:
-            raise TypeError("Data destination should be an instance of Port")
-
-    def receive(self, data):
-        print(f"Bot {self.id} received data: {data}")
+            print(f"Data type {type(data).__name__} not recognized by bot {self.id} handle func.")
 
     # Define the functions for parsing different types of data
     def _handle_string(self, data, source):
@@ -107,8 +146,8 @@ class Bot:
         # Here you might do something with the data...
         # then echo back to source
         source.port.send(self, data)
-    ...
 
+    # Magic methods
     def __iter__(self):
         for attr, value in self.__dict__.items():
             yield attr, value

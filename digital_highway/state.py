@@ -2,6 +2,12 @@ import uuid
 import utils
 
 class State:
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'state_dict': lambda: {},
+        '_restricted_config_keys': lambda: {'id', 'logger'},
+    }
+
     def __init__(self, config=None):
         self.run_default_config() # Always run this first
         self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
@@ -12,10 +18,10 @@ class State:
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
 
     def run_default_config(self):
-        # Set default values for the State
-        self.id = str(uuid.uuid4())
-        self.state_dict = {}
-        self._restricted_config_keys = {'id', 'logger'} # These keys cannot be changed
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
+
+    # rest of your code...
 
     def run_config(self, config):
         for key, value in config.items():
@@ -23,11 +29,11 @@ class State:
                 self.state_dict[key] = value
         self.logger.info(f"Updated config for {self.__class__.__name__} {self.id} with {config}")
 
-    def get_state(self):
-        return self.state_dict
-
     def get(self, key):
         return self.state_dict.get(key)
+
+    def get_state(self):
+        return self.state_dict
 
     def set_state(self, key, value):
         self.state_dict[key] = value

@@ -2,17 +2,27 @@ from bot import Bot
 import utils
 
 class Controller(Bot):
-    DEFAULT_CONFIG = {
-        'type': 'Controller',
+    DEFAULT_CONFIG_SELF = {
+        'type': lambda self: self.__class__.__name__,
     }
 
-    def __init__(self, config=None):
-        super().__init__(config)
-        self.config = self.DEFAULT_CONFIG.copy()
-        self.config.update(config)
+    DEFAULT_CONFIG = {}
 
-        self.logger = utils.setup_logger(self, 'DEBUG')
-        self.logger.debug(f"Controller {self.id} created")
+    def __init__(self, config=None):
+        self.run_default_config() # Always run this first
+        self.logger = utils.setup_logger(self, 'DEBUG') # Always run this second
+
+        if config:
+            self.run_config(config) # Run the config if it exists
+
+    def run_default_config(self):
+        super().run_default_config()
+        for key, default_value_func in self.DEFAULT_CONFIG_SELF.items():
+            setattr(self, key, default_value_func(self))
+        for key, default_value_func in self.DEFAULT_CONFIG.items():
+            setattr(self, key, default_value_func())
+
+    # ... rest of your code ...
 
     def handle(self, data, source):
         print(f"Controller received data from {source.id}: {data}")
