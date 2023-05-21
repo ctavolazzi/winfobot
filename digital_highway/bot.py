@@ -10,6 +10,7 @@ import random
 import string
 from brain import Brain
 from bot_behaviors import Behavior, BehaviorFactory
+import json
 
 class ThreadedBrain(Brain):
     def __init__(self, owner):
@@ -18,11 +19,20 @@ class ThreadedBrain(Brain):
         self.stop_event = threading.Event()
 
     def start_thinking(self):
-        self.thread.start()
+        try:
+            self._thinking = True
+            self._thread = threading.Thread(target=self._think)
+            self._thread.start()
+        except Exception as e:
+            self.bot.logger.error(f"Error starting brain: {str(e)}")
 
     def stop_thinking(self):
-        self.stop_event.set()
-        self.thread.join()
+        try:
+            self._thinking = False
+            if self._thread.is_alive():
+                self._thread.join()
+        except Exception as e:
+            self.bot.logger.error(f"Error stopping brain: {str(e)}")
 
     def thinking(self):
         while not self.stop_event.is_set():
@@ -32,13 +42,46 @@ class ThreadedBrain(Brain):
 
 class MessageHandler:
     def handle_message(self, message, bot):
-        # Implement message handling logic here
-        pass
+        # TODO: Implement message handling logic here
+        if isinstance(message, str):
+            # Here we consider the message as a command
+            # TODO: Parse the command and perform the action
+            command, *args = message.split()
+            if hasattr(bot, command):
+                getattr(bot, command)(*args)
+            else:
+                bot.logger.error(f"Bot received unknown command: {command}")
+        elif isinstance(message, dict):
+            # Here we consider the message as a structured data
+            # TODO: Handle the data as per your application requirements
+            pass
+
 
 class ConnectionHandler:
     def handle_connection(self, connection, bot):
-        # Implement connection handling logic here
-        pass
+        # TODO: Implement connection handling logic here
+        if connection not in bot.port.get_connections():
+            bot.logger.warning(f"Received a connection from an unknown source: {connection.owner}")
+            bot.port.connect(connection)
+        else:
+            bot.logger.info(f"Received a connection from {connection.owner}")
+
+class BaseFormatter:
+    def __init__(self, sender):
+        self.sender = sender
+
+    def format(self, data):
+        raise NotImplementedError
+
+
+class JSONFormatter(BaseFormatter):
+    def format(self, data):
+        formatted_data = {
+            'sender': self.sender,
+            'data': data,
+        }
+        return json.dumps(formatted_data)
+
 
 class Bot:
     _REQUIRED_CONFIG_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
@@ -77,6 +120,7 @@ class Bot:
         # Set up the handlers
         self.message_handler = MessageHandler()
         self.connection_handler = ConnectionHandler()
+        self.formatter = JSONFormatter(self)
 
         if config:
             utils.update_config(self, config)
@@ -91,11 +135,27 @@ class Bot:
     def _initialize_default_behaviors(self):
         self._behaviors = BehaviorFactory.create_behaviors()
 
-
     def setup_logger(self):
         logger_instance = utils.SingletonLogger(self.__class__.__name__)  # Getting the logger instance
         logger_instance.set_level(self._logger_level)  # Setting the log level
         self.logger = logger_instance.get_logger()  # Getting the logger object
+
+    def execute(self, command, *args):
+        try:
+            if hasattr(self, command):
+                getattr(self, command)(*args)
+                self.logger.info(f"Executed command: {command}")
+            else:
+                self.logger.error(f"Unknown command: {command}")
+        except Exception as e:
+            self.logger.error(f"Error executing command {command}: {str(e)}")
+
+    def learn(self, behavior):
+        if isinstance(behavior, Behavior):
+            self._behaviors.append(behavior)
+            self.logger.info(f"Learned new behavior: {type(behavior).__name__}")
+        else:
+            self.logger.error("Can only learn instances of Behavior")
 
     # Handlers
     def handle(self, data, source):
@@ -170,15 +230,22 @@ class Bot:
             raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
 
     # Send and receive methods
+    def set_formatter(self, formatter_class):
+        if issubclass(formatter_class, BaseFormatter):
+            self.formatter = formatter_class(self)
+        else:
+            self.logger.error('Formatter should be a subclass of BaseFormatter')
+            raise TypeError("Formatter should be a subclass of BaseFormatter")
+
     def send(self, data, destination):
+        formatted_data = self.formatter.format(data)
         if isinstance(destination, Port):
-            destination.receive(data, self.port)
+            destination.receive(formatted_data)
         elif isinstance(destination, Bot):
-            destination.port.receive(data, self.port)
+            destination.port.receive(formatted_data)
         else:
             self.logger.error('Data destination should be an instance of Port or Bot')
             raise TypeError("Data destination should be an instance of Port or Bot")
-
 
     def receive(self, data, source_port):
         if isinstance(source_port, Port):

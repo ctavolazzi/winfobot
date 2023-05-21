@@ -6,28 +6,27 @@ class Behavior:
     def handle(self, data):
         raise NotImplementedError("This method should be overridden in subclass")
 
-class GreetingBehavior(Behavior):
+class GreetBehavior(Behavior):
     def can_handle(self, data):
-        return isinstance(data, dict) and data.get('type') == 'Greeting'
+        if isinstance(data, str):
+            return data.lower().startswith("hello")
+        return False
 
     def handle(self, data):
-        print(f"Greeting behavior handling data: {data}")
+        print("Hello to you too!")
 
 
 class FarewellBehavior(Behavior):
     def can_handle(self, data):
-        return isinstance(data, dict) and data.get('type') == 'Farewell'
+        if isinstance(data, str):
+            return data.lower().startswith("goodbye")
+        return False
 
     def handle(self, data):
-        print(f"Farewell behavior handling data: {data}")
+        print("Goodbye! See you soon!")
 
 
 class BehaviorFactory:
     @staticmethod
     def create_behaviors():
-        # Create instances of different behaviors
-        greeting_behavior = GreetingBehavior()
-        farewell_behavior = FarewellBehavior()
-
-        # Return all behaviors in a list
-        return [greeting_behavior, farewell_behavior]
+        return [GreetBehavior(), FarewellBehavior()]

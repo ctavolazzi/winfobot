@@ -3,6 +3,7 @@ import utils
 import threading
 from message import Message
 import bcrypt
+import json
 
 class UnconnectedDestinationError(Exception):
     pass
@@ -106,22 +107,6 @@ class MessageManager:
         self._port = port
         self.logger = utils.setup_logger(self)
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} for Port {self._port.id}')
-
-    def send(self, content: str, destinations):
-        self.logger.debug(f'Current connections: {self._port.get_connections()}')
-        current_connections = self._port.get_connections()
-        if not isinstance(destinations, list):
-            destinations = [destinations]
-        with self.lock:  # Acquire the lock
-            for destination in destinations:
-                if destination in current_connections:
-                    message = Message(self, content, destination)
-                    self._messages.add(message)
-                    destination.receive(message)
-                    self.logger.info(f'Message sent from Port {self._port.id} to {destination.__class__.__name__ + " " + destination.id}.')
-                else:
-                    self.logger.error(f"Cannot send message to unconnected destination {destination.__class__.__name__ + ' ' + destination.id}.")
-                    raise InvalidDestinationError(f"Cannot send message to unconnected destination {destination.__class__.__name__ + ' ' + destination.id}.")
 
     def receive(self, message: Message):
         if not isinstance(message, Message):
