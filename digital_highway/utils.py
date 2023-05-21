@@ -1,6 +1,6 @@
 import os
 import logging
-import uuid
+from uuid import uuid4
 import sys
 from dotenv import load_dotenv
 from functools import wraps
@@ -71,14 +71,17 @@ def setup_logger(target, level='INFO'):
 class SingletonLogger:
     _loggers = {}
 
-    def __new__(cls, classname, *args, **kwargs):
+    def __init__(self, classname):
+        self.logger = self.create_logger(classname)
+
+    @classmethod
+    def create_logger(cls, classname):
         if classname not in cls._loggers:
-            new_logger = super(SingletonLogger, cls).__new__(cls, *args, **kwargs)
-            new_logger.logger = logging.getLogger(f"BotLogger-{classname}")
+            new_logger = logging.getLogger(f"BotLogger-{classname}")
             handler = logging.StreamHandler(sys.stdout)
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
-            new_logger.logger.addHandler(handler)
+            new_logger.addHandler(handler)
             cls._loggers[classname] = new_logger
         return cls._loggers[classname]
 
@@ -92,7 +95,7 @@ class SingletonLogger:
         return self.logger
 
 def generate_unique_id():
-    return str(uuid.uuid4())
+    return str(uuid4())
 
 def run_default_config(target, config):
     for key, value in config.items():
