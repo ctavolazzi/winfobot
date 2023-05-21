@@ -168,6 +168,7 @@ class Port:
 
     def setup_logger(self):
         self.logger = utils.setup_logger(self, self._logger_level)
+        self.logger.debug(f'Initialized logger for {self.__class__.__name__} {self.id}')
 
     def _verify_password(self, password_hash):
         return self._hashed_password == password_hash
@@ -220,8 +221,8 @@ class Port:
     def send(self, content, destinations):
         self._message_manager.send(content, destinations)
 
-    def receive(self, message):
-        self._message_manager.receive(message)
+    def receive(self, data):
+        self._message_manager.receive(data)
 
     def broadcast(self, content):
         for destination in self._connection_manager.connections:
@@ -229,6 +230,12 @@ class Port:
 
     def get_connections(self):
         return self._connection_manager.connections
+
+    def lock(self):
+        self.is_locked = True
+
+    def unlock(self):
+        self.is_locked = False
 
 def connect_ports(port1, port2):
     port1.connect(port2)

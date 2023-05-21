@@ -7,7 +7,7 @@ class Brain():
         self.logger = utils.setup_logger(self, 'DEBUG')
 
         if config:
-            utils.run_config(self, config)
+            utils.update_config(self, config)
 
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
 

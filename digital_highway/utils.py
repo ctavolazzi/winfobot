@@ -1,6 +1,7 @@
 import os
 import logging
 import uuid
+import sys
 
 def setup_logger(target, level='INFO'):
     # Create logs directory if not exists
@@ -71,3 +72,28 @@ def verify_config(target, config):
         if key not in config:
             target.logger.error(f"Missing required key {key} in {type(target).__name__} config.")
             return False
+
+class SingletonLogger:
+    _loggers = {}
+
+    def __new__(cls, classname, *args, **kwargs):
+        if classname not in cls._loggers:
+            new_logger = super(SingletonLogger, cls).__new__(cls, *args, **kwargs)
+            new_logger.logger = logging.getLogger(f"BotLogger-{classname}")
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            new_logger.logger.addHandler(handler)
+            cls._loggers[classname] = new_logger
+        return cls._loggers[classname]
+
+    def set_level(self, level):
+        log_level = getattr(logging, level.upper(), None)
+        if not isinstance(log_level, int):
+            raise ValueError('Invalid log level: %s' % level)
+        self.logger.setLevel(log_level)
+
+    def get_logger(self):
+        return self.logger
+
+

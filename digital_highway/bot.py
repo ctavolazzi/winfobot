@@ -4,18 +4,46 @@ import pprint
 from port import Port
 from state import State
 from memory import Memory
-from config import Config
 import datetime
 import utils
 import random
 import string
 from brain import Brain
+from bot_behaviors import Behavior, BehaviorFactory
 
+class ThreadedBrain(Brain):
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.thread = threading.Thread(target=self.thinking)
+        self.stop_event = threading.Event()
+
+    def start_thinking(self):
+        self.thread.start()
+
+    def stop_thinking(self):
+        self.stop_event.set()
+        self.thread.join()
+
+    def thinking(self):
+        while not self.stop_event.is_set():
+            # Your thinking logic goes here
+
+            pass
+
+class MessageHandler:
+    def handle_message(self, message, bot):
+        # Implement message handling logic here
+        pass
+
+class ConnectionHandler:
+    def handle_connection(self, connection, bot):
+        # Implement connection handling logic here
+        pass
 
 class Bot:
     _REQUIRED_CONFIG_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
 
-    DEFAULT_CONFIG = {
+    _DEFAULT_CONFIG = {
         'id': lambda: str(uuid.uuid4()),
         'inventory': lambda: {'items': []},
         'lock': lambda: threading.Lock(),
@@ -31,8 +59,9 @@ class Bot:
     }
 
     def __init__(self, config=None):
-        self.initialize_default_config()
-        self.logger = utils.setup_logger(self, 'DEBUG')
+        self._initialize_default_config()
+        self._initialize_default_behaviors()
+        self.setup_logger()
 
         # Set up the bot's self referential config
         self.name = self.generate_name()
@@ -43,7 +72,11 @@ class Bot:
         self.port = Port({'owner': self}) if not hasattr(self, 'port') else self.port
         self.state = State({'owner': self}) if not hasattr(self, 'state') else self.state
         self.memory = Memory({'owner': self}) if not hasattr(self, 'memory') else self.memory
-        self.brain = Brain({'owner': self}) if not hasattr(self, 'brain') else self.brain
+        self.brain = ThreadedBrain({'owner': self}) if not hasattr(self, 'brain') else self.brain
+
+        # Set up the handlers
+        self.message_handler = MessageHandler()
+        self.connection_handler = ConnectionHandler()
 
         if config:
             utils.update_config(self, config)
@@ -51,26 +84,45 @@ class Bot:
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
 
     # Config methods
-    def initialize_default_config(self):
+    def _initialize_default_config(self):
         utils.run_default_config(self, self._DEFAULT_CONFIG)
         utils.verify_config(self, self._REQUIRED_CONFIG_KEYS)
 
-    def initialize_handlers(self):
-        pass
+    def _initialize_default_behaviors(self):
+        self._behaviors = BehaviorFactory.create_behaviors()
+
+
+    def setup_logger(self):
+        logger_instance = utils.SingletonLogger(self.__class__.__name__)  # Getting the logger instance
+        logger_instance.set_level(self._logger_level)  # Setting the log level
+        self.logger = logger_instance.get_logger()  # Getting the logger object
 
     # Handlers
     def handle(self, data, source):
-        if isinstance(data, (str, dict, list)):
-            self._handle_data(data, source)
+        self.logger.debug(f"Handling data: {data}")
+        try:
+            for behavior in self._behaviors:
+                if behavior.can_handle(data):
+                    behavior.handle(data)
+                    break
+        except Exception as e:
+            self.logger.error(f"Error while handling data: {str(e)}")
         else:
-            raise TypeError(f"Data type {type(data).__name__} not recognized by bot {self.id} handle func.")
+            source.port.send(self, data)
 
     # Define the function for parsing data
     def _handle_data(self, data, source):
-        # Here you might do something with the data...
-        # then echo back to source
-        source.port.send(self, data)
+        try:
+            for behavior in self._behaviors:
+                if behavior.can_handle(data):
+                    behavior.handle(data)
+                    break
+        except Exception as e:
+            self.logger.error(f"Error while handling data: {str(e)}")
+        else:
+            source.port.send(self, data)
 
+    # Updaters
     def update_config(self, config):
         for key, value in config.items():
             if key not in self._restricted_config_keys and not key.startswith('_'):
@@ -105,36 +157,51 @@ class Bot:
     def attempt_connection(self, port):
         if isinstance(port, Port):
             self.port.connect(port)
+            self.connection_handler.handle_connection(port, self)
         else:
+            self.logger.error('Expected a Port object, but got {type(port).__name__}')
             raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
 
     def disconnect(self, port):
         if isinstance(port, Port):
             self.port.disconnect(port)
         else:
+            self.logger.error('Expected a Port object, but got {type(port).__name__}')
             raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
 
     # Send and receive methods
     def send(self, data, destination):
         if isinstance(destination, Port):
             destination.receive(data, self.port)
+        elif isinstance(destination, Bot):
+            destination.port.receive(data, self.port)
         else:
-            raise TypeError("Data destination should be an instance of Port")
+            self.logger.error('Data destination should be an instance of Port or Bot')
+            raise TypeError("Data destination should be an instance of Port or Bot")
+
 
     def receive(self, data, source_port):
         if isinstance(source_port, Port):
             source = source_port.owner
             self.logger.info(f"Bot {self.id} received data from {source.id}: {data}")
-            self.handle(data, source)
+            self.message_handler.handle_message(data, self)
         else:
             raise TypeError("Data source should be an instance of Port")
 
+    def attempt_connection(self, port):
+        if isinstance(port, Port):
+            self.port.connect(port)
+            self.connection_handler.handle_connection(port, self)
+        else:
+            self.logger.error('Expected a Port object, but got {type(port).__name__}')
+            raise TypeError(f'Expected a Port object, but got {type(port).__name__}')
+
     # Getters and setters
     def get(self, attribute):
-        if hasattr(self, attribute):
+        try:
             return getattr(self, attribute)
-        else:
-            raise AttributeError(f"{attribute} not found in bot attributes")
+        except AttributeError:
+            self.logger.error(f"{attribute} not found in bot attributes")
 
     # Debugging methods
     def identify(self):
@@ -206,19 +273,22 @@ def main():
     assert isinstance(bot1.port.address, str), "Bot's Port address should be a string."
 
     bot1.remember("item1")
-    assert any(item.data == "item1" for item in bot1.memory.get_memory()['working_memory']), "Bot's memory should contain the remembered item."
+    assert any(item.data == "item1" for item in bot1.memory.get_memory()['working_memory']), "Bot's memory should contain the     remembered item."
 
     assert isinstance(bot1.state, State), "Bot's state should be an instance of State."
     bot1.state.update({"name": "NewState"})
     assert bot1.state.state_dict['name'] == "NewState", "Bot's state should update correctly."
 
-    assert isinstance(bot1.port.connections, set), "Bot's connections should be a set."
+    assert isinstance(bot1.port.get_connections(), set), "Bot's connections should be a set."
     bot2 = Bot()
     bot1.attempt_connection(bot2.port)
-    assert bot2.port in bot1.port.connections, "Bot's connections should include the connected port."
+    assert bot2.port in bot1.port.get_connections(), "Bot's connections should include the connected port."
 
     bot1.disconnect(bot2.port)
-    assert bot2.port not in bot1.port.connections, "Bot's connections should not include the disconnected port."
+    assert bot2.port not in bot1.port.get_connections(), "Bot's connections should not include the disconnected port."
+
+    bot1.send({"type": "message", "content": "Hello, bot2!"}, bot2)
+    bot1.send({"type": "command", "content": "Goodbye, bot2!"}, bot2)
 
 if __name__ == '__main__':
     main()
