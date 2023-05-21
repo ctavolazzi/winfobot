@@ -11,14 +11,23 @@ import random
 import string
 from brain import Brain
 
+
 class Bot:
+    _REQUIRED_CONFIG_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
+
     DEFAULT_CONFIG = {
         'id': lambda: str(uuid.uuid4()),
         'inventory': lambda: {'items': []},
+        'lock': lambda: threading.Lock(),
         '_created_at': lambda: datetime.datetime.now(),
         '_updated_at': lambda: datetime.datetime.now(),
-        '_parent_id': lambda: None,
+        '_parent': lambda: None,
+        '_logger_level': 'DEBUG',
         '_restricted_config_keys': lambda: {'id', 'port', 'state', 'memory', 'logger', 'lock'},
+        'is_thinking': False,
+        'is_updating': False,
+        'is_active': True,
+        'has_controller': False,
     }
 
     def __init__(self, config=None):
@@ -36,18 +45,31 @@ class Bot:
         self.memory = Memory({'owner': self}) if not hasattr(self, 'memory') else self.memory
         self.brain = Brain({'owner': self}) if not hasattr(self, 'brain') else self.brain
 
-        # Enable locking for thread safety
-        self.lock = threading.Lock()
-
         if config:
-            utils.run_config(self, config)
+            utils.update_config(self, config)
 
         self.logger.info(f'Initialized {self.__class__.__name__} {self.id} with config {config}')
 
     # Config methods
     def initialize_default_config(self):
-        for key, default_value_func in self.DEFAULT_CONFIG.items():
-            setattr(self, key, default_value_func())
+        utils.run_default_config(self, self._DEFAULT_CONFIG)
+        utils.verify_config(self, self._REQUIRED_CONFIG_KEYS)
+
+    def initialize_handlers(self):
+        pass
+
+    # Handlers
+    def handle(self, data, source):
+        if isinstance(data, (str, dict, list)):
+            self._handle_data(data, source)
+        else:
+            raise TypeError(f"Data type {type(data).__name__} not recognized by bot {self.id} handle func.")
+
+    # Define the function for parsing data
+    def _handle_data(self, data, source):
+        # Here you might do something with the data...
+        # then echo back to source
+        source.port.send(self, data)
 
     def update_config(self, config):
         for key, value in config.items():
@@ -102,7 +124,7 @@ class Bot:
     def receive(self, data, source_port):
         if isinstance(source_port, Port):
             source = source_port.owner
-            print(f"Bot {self.id} received data from {source.id}: {data}")
+            self.logger.info(f"Bot {self.id} received data from {source.id}: {data}")
             self.handle(data, source)
         else:
             raise TypeError("Data source should be an instance of Port")
