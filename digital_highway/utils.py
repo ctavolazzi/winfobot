@@ -2,6 +2,13 @@ import os
 import logging
 import uuid
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEYS = {
+    'open_ai': os.getenv('OPEN_AI_API_KEY')
+}
 
 def setup_logger(target, level='INFO'):
     # Create logs directory if not exists
