@@ -8,80 +8,15 @@ import datetime
 import utils
 import random
 import string
-from brain import Brain
 from bot_behaviors import Behavior, BehaviorFactory
 import json
-
-class ThreadedBrain(Brain):
-    def __init__(self, owner):
-        super().__init__(owner)
-        self.thread = threading.Thread(target=self.thinking)
-        self.stop_event = threading.Event()
-
-    def start_thinking(self):
-        try:
-            self._thinking = True
-            self._thread = threading.Thread(target=self._think)
-            self._thread.start()
-        except Exception as e:
-            self.bot.logger.error(f"Error starting brain: {str(e)}")
-
-    def stop_thinking(self):
-        try:
-            self._thinking = False
-            if self._thread.is_alive():
-                self._thread.join()
-        except Exception as e:
-            self.bot.logger.error(f"Error stopping brain: {str(e)}")
-
-    def thinking(self):
-        while not self.stop_event.is_set():
-            # Your thinking logic goes here
-
-            pass
-
-class MessageHandler:
-    def handle_message(self, message, bot):
-        # TODO: Implement message handling logic here
-        if isinstance(message, str):
-            # Here we consider the message as a command
-            # TODO: Parse the command and perform the action
-            command, *args = message.split()
-            if hasattr(bot, command):
-                getattr(bot, command)(*args)
-            else:
-                bot.logger.error(f"Bot received unknown command: {command}")
-        elif isinstance(message, dict):
-            # Here we consider the message as a structured data
-            # TODO: Handle the data as per your application requirements
-            pass
-
-
-class ConnectionHandler:
-    def handle_connection(self, connection, bot):
-        # TODO: Implement connection handling logic here
-        if connection not in bot.port.get_connections():
-            bot.logger.warning(f"Received a connection from an unknown source: {connection.owner}")
-            bot.port.connect(connection)
-        else:
-            bot.logger.info(f"Received a connection from {connection.owner}")
-
-class BaseFormatter:
-    def __init__(self, sender):
-        self.sender = sender
-
-    def format(self, data):
-        raise NotImplementedError
-
-
-class JSONFormatter(BaseFormatter):
-    def format(self, data):
-        formatted_data = {
-            'sender': self.sender,
-            'data': data,
-        }
-        return json.dumps(formatted_data)
-
+from typing import Any, Dict, List, Union
+from event_queue import EventQueue
+import asyncio
+from events import MessageEvent, CommandEvent
+from threaded_brain import ThreadedBrain
+from formatters import BaseFormatter, JSONFormatter
+from bot_handlers import MessageHandler, ConnectionHandler
 
 class Bot:
     _REQUIRED_CONFIG_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
@@ -121,6 +56,7 @@ class Bot:
         self.message_handler = MessageHandler()
         self.connection_handler = ConnectionHandler()
         self.formatter = JSONFormatter(self)
+        self.q = EventQueue(self)
 
         if config:
             utils.update_config(self, config)
@@ -140,6 +76,20 @@ class Bot:
         logger_instance.set_level(self._logger_level)  # Setting the log level
         self.logger = logger_instance.get_logger()  # Getting the logger object
 
+    async def handle_event(self, event):
+        if isinstance(event, MessageEvent):
+            self.logger.info(f"Bot {self.id} received data from {event.source.id}: {event.message}")
+            await self.message_handler.handle_message(event.message, self)
+        elif isinstance(event, CommandEvent):
+            try:
+                if hasattr(self, event.command):
+                    getattr(self, event.command)(*event.args)
+                    self.logger.info(f"Executed command: {event.command}")
+                else:
+                    self.logger.error(f"Unknown command: {event.command}")
+            except TypeError as e:
+                self.logger.error(f"Error executing command {event.command}: {str(e)}")
+
     def execute(self, command, *args):
         try:
             if hasattr(self, command):
@@ -147,8 +97,16 @@ class Bot:
                 self.logger.info(f"Executed command: {command}")
             else:
                 self.logger.error(f"Unknown command: {command}")
-        except Exception as e:
+        except TypeError as e:
             self.logger.error(f"Error executing command {command}: {str(e)}")
+
+    def add_event(self, event):
+        self.q.add_event(event)
+
+    async def run_event_loop(self):
+        while self.is_active:  # assuming `is_active` is a flag indicating if the bot is running
+            await self.q.process_events(self)
+
 
     def learn(self, behavior):
         if isinstance(behavior, Behavior):
@@ -237,21 +195,21 @@ class Bot:
             self.logger.error('Formatter should be a subclass of BaseFormatter')
             raise TypeError("Formatter should be a subclass of BaseFormatter")
 
-    def send(self, data, destination):
+    async def send(self, data, destination):
         formatted_data = self.formatter.format(data)
         if isinstance(destination, Port):
-            destination.receive(formatted_data)
+            await destination.receive(formatted_data)
         elif isinstance(destination, Bot):
-            destination.port.receive(formatted_data)
+            await destination.port.receive(formatted_data)
         else:
             self.logger.error('Data destination should be an instance of Port or Bot')
             raise TypeError("Data destination should be an instance of Port or Bot")
 
-    def receive(self, data, source_port):
+    async def receive(self, data, source_port):
         if isinstance(source_port, Port):
             source = source_port.owner
             self.logger.info(f"Bot {self.id} received data from {source.id}: {data}")
-            self.message_handler.handle_message(data, self)
+            await self.message_handler.handle_message(data, self)
         else:
             raise TypeError("Data source should be an instance of Port")
 
@@ -324,6 +282,14 @@ class Bot:
 
     def __str__(self):
         return f'Bot {self.id} \n Port {self.port.get_address()} \n State: {self.state} \n Config: {self.config} \n Connections: {self.port.connections} \n Memory: {self.memory} \n Lock: {self.lock} \n Logger: {self.logger} \n '
+
+async def main():
+    my_bot = Bot('bot1', formatter, logger, message_handler)
+    message_event = MessageEvent('Hello, world!', 'source_bot')
+    await my_bot.event_queue.add_event(message_event)
+    await my_bot.event_queue.process_events(my_bot)
+
+asyncio.run(main())
 
 def main():
     bot1 = Bot()

@@ -3,12 +3,27 @@ import logging
 import uuid
 import sys
 from dotenv import load_dotenv
+from functools import wraps
 
 load_dotenv()
 
 API_KEYS = {
     'open_ai': os.getenv('OPEN_AI_API_KEY')
 }
+
+def log_func_called(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        logging.info(f"{func.__name__} is called.")
+        return func(*args, **kwargs)
+    return wrapper
+
+def thread_safe_method(method):
+    @wraps(method)
+    def _method(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return _method
 
 def setup_logger(target, level='INFO'):
     # Create logs directory if not exists

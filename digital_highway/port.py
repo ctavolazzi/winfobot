@@ -115,6 +115,18 @@ class MessageManager:
             self._messages.add(message)
             self.logger.info(f'Message received at Port {self._port.id}.')
 
+    def send(self, content, destinations):
+        if isinstance(destinations, Port):
+            destinations = [destinations]  # Encapsulate single destination in list for compatibility
+
+        for destination in destinations:
+            if destination in self._port._connection_manager.connections:
+                message = Message(content=content, source=self._port, destination=destination)
+                destination.receive(message)
+                self.logger.info(f'Message sent from Port {self._port.id} to {destination.id}.')
+            else:
+                raise InvalidDestinationError(f"Cannot send message. Destination Port {destination.id} is not connected.")
+
 class Port:
     _REQUIRED_CONFIG_KEYS = ['id', 'address', 'logger', 'lock', 'handlers']
 
