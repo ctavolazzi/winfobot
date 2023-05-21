@@ -9,14 +9,12 @@ import utils
 import random
 import string
 from bot_behaviors import Behavior, BehaviorFactory
-import json
 from typing import Any, Dict, List, Union
 from event_queue import EventQueue
-import asyncio
 from events import MessageEvent, CommandEvent
 from threaded_brain import ThreadedBrain
 from formatters import BaseFormatter, JSONFormatter
-from bot_handlers import MessageHandler, ConnectionHandler
+from bot_handlers import GeneralHandler, MessageHandler, ConnectionHandler
 
 class Bot:
     _REQUIRED_CONFIG_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
@@ -57,6 +55,9 @@ class Bot:
         self.connection_handler = ConnectionHandler()
         self.formatter = JSONFormatter(self)
         self.q = EventQueue(self)
+
+        # Set up default behaviors
+        self._behaviors = BehaviorFactory.create_behaviors()
 
         if config:
             utils.update_config(self, config)
@@ -100,13 +101,12 @@ class Bot:
         except TypeError as e:
             self.logger.error(f"Error executing command {command}: {str(e)}")
 
-    def add_event(self, event):
+    async def add_event(self, event):
         self.q.add_event(event)
 
-    async def run_event_loop(self):
+    async def process_events(self):
         while self.is_active:  # assuming `is_active` is a flag indicating if the bot is running
             await self.q.process_events(self)
-
 
     def learn(self, behavior):
         if isinstance(behavior, Behavior):
@@ -128,17 +128,36 @@ class Bot:
         else:
             source.port.send(self, data)
 
-    # Define the function for parsing data
-    def _handle_data(self, data, source):
-        try:
-            for behavior in self._behaviors:
-                if behavior.can_handle(data):
-                    behavior.handle(data)
-                    break
-        except Exception as e:
-            self.logger.error(f"Error while handling data: {str(e)}")
-        else:
-            source.port.send(self, data)
+    # Updaters
+    def update_config(self, config):
+        for key, value in config.items():
+            if key not in self._restricted_config_keys and not key.startswith('_'):
+                if callable(value):
+                    setattr(self, key, value(self))
+                else:
+                    setattr(self, key, value)
+            else:
+                self.logger.warning(f"Restricted key {key} in Bot config. Skipping.")
+        self._updated_at = datetime.datetime.now()
+        self.logger.info(f"Updated config for {self.__class__.__name__} {self.id} with {config}")
+
+    # State methods
+    def update_state(self, state):
+        self.state.update(state)
+
+    # Memory methods
+    def remember(self, item):
+        self.memory.remember(item)
+
+    def recall(self, item):
+        return self.memory.recall(item)
+
+    def forget(self, item):
+        self.memory.forget(item)
+
+    # Generator methods
+    def generate_name(self):
+        return self.__class__.__name__ + ''.join(random.choices(string.ascii_lowercase, k=5)) + str(random.randint(1000,9999))
 
     # Updaters
     def update_config(self, config):
@@ -232,35 +251,6 @@ class Bot:
     def identify(self):
        pprint.pprint(self.__dict__)
 
-    # Handlers
-    def handle(self, data, source):
-        # Here is where you could use your handle_string, handle_dict and handle_list methods.
-        # Just as an example:
-        if isinstance(data, str):
-            self._handle_string(data, source)
-        elif isinstance(data, dict):
-            self._handle_dict(data, source)
-        elif isinstance(data, list):
-            self._handle_list(data, source)
-        else:
-            print(f"Data type {type(data).__name__} not recognized by bot {self.id} handle func.")
-
-    # Define the functions for parsing different types of data
-    def _handle_string(self, data, source):
-        # Here you might do something with the data...
-        # then echo back to source
-        source.port.send(self, data)
-
-    def _handle_dict(self, data, source):
-        # Here you might do something with the data...
-        # then echo back to source
-        source.port.send(self, data)
-
-    def _handle_list(self, data, source):
-        # Here you might do something with the data...
-        # then echo back to source
-        source.port.send(self, data)
-
     # Magic methods
     def __iter__(self):
         for attr, value in self.__dict__.items():
@@ -282,14 +272,6 @@ class Bot:
 
     def __str__(self):
         return f'Bot {self.id} \n Port {self.port.get_address()} \n State: {self.state} \n Config: {self.config} \n Connections: {self.port.connections} \n Memory: {self.memory} \n Lock: {self.lock} \n Logger: {self.logger} \n '
-
-async def main():
-    my_bot = Bot('bot1', formatter, logger, message_handler)
-    message_event = MessageEvent('Hello, world!', 'source_bot')
-    await my_bot.event_queue.add_event(message_event)
-    await my_bot.event_queue.process_events(my_bot)
-
-asyncio.run(main())
 
 def main():
     bot1 = Bot()
@@ -323,5 +305,6 @@ def main():
     bot1.send({"type": "message", "content": "Hello, bot2!"}, bot2)
     bot1.send({"type": "command", "content": "Goodbye, bot2!"}, bot2)
 
-if __name__ == '__main__':
-    main()
+    # Call the main function
+    if __name__ == '__main__':
+        main()

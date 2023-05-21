@@ -23,3 +23,8 @@ class ConnectionHandler:
             bot.port.connect(connection)
         else:
             bot.logger.info(f"Received a connection from {connection.owner}")
+
+class GeneralHandler:
+    def handle_stuff(self, stuff):
+        #TODO : Implement some general methods for doing stuff
+        pass

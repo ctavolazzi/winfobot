@@ -1,8 +1,8 @@
 from datetime import datetime
 
 class Message:
-    def __init__(self, sender, content, destination):
-        self.source = sender
+    def __init__(self, source, content, destination):
+        self.source = source
         self.destination = destination
         self.content = content
         self.timestamp = datetime.now()

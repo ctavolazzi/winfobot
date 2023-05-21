@@ -121,7 +121,7 @@ class MessageManager:
 
         for destination in destinations:
             if destination in self._port._connection_manager.connections:
-                message = Message(content=content, source=self._port, destination=destination)
+                message = Message(source=self._port, content=content, destination=destination)
                 destination.receive(message)
                 self.logger.info(f'Message sent from Port {self._port.id} to {destination.id}.')
             else:
