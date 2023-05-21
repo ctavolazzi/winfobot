@@ -4,6 +4,7 @@ import uuid
 import sys
 from dotenv import load_dotenv
 from functools import wraps
+import requests
 
 load_dotenv()
 
@@ -38,8 +39,10 @@ def setup_logger(target, level='INFO'):
     if not os.path.exists(f'logs/{target.__class__.__name__}/{target.id}'):
         os.makedirs(f'logs/{target.__class__.__name__}/{target.id}')
 
-    # Create a custom logger
-    logger = logging.getLogger(target.id)
+    # Use SingletonLogger to get/create a logger
+    singleton_logger = SingletonLogger(target.__class__.__name__)
+    logger = singleton_logger.get_logger()
+
     level = level.upper()
     level_dict = {
         'DEBUG': logging.DEBUG,
@@ -64,6 +67,29 @@ def setup_logger(target, level='INFO'):
     logger.addHandler(f_handler)
 
     return logger
+
+class SingletonLogger:
+    _loggers = {}
+
+    def __new__(cls, classname, *args, **kwargs):
+        if classname not in cls._loggers:
+            new_logger = super(SingletonLogger, cls).__new__(cls, *args, **kwargs)
+            new_logger.logger = logging.getLogger(f"BotLogger-{classname}")
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            new_logger.logger.addHandler(handler)
+            cls._loggers[classname] = new_logger
+        return cls._loggers[classname]
+
+    def set_level(self, level):
+        log_level = getattr(logging, level.upper(), None)
+        if not isinstance(log_level, int):
+            raise ValueError('Invalid log level: %s' % level)
+        self.logger.setLevel(log_level)
+
+    def get_logger(self):
+        return self.logger
 
 def generate_unique_id():
     return str(uuid.uuid4())
@@ -90,32 +116,23 @@ def update_config(target, config):
 
 def verify_config(target, config):
     # Verify that all required keys are present in the config of the target
-    for key in target._REQUIRED_CONFIG_KEYS:
+    for key in config:
         if key not in config:
             target.logger.error(f"Missing required key {key} in {type(target).__name__} config.")
             return False
 
-class SingletonLogger:
-    _loggers = {}
 
-    def __new__(cls, classname, *args, **kwargs):
-        if classname not in cls._loggers:
-            new_logger = super(SingletonLogger, cls).__new__(cls, *args, **kwargs)
-            new_logger.logger = logging.getLogger(f"BotLogger-{classname}")
-            handler = logging.StreamHandler(sys.stdout)
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            new_logger.logger.addHandler(handler)
-            cls._loggers[classname] = new_logger
-        return cls._loggers[classname]
+def generate_name():
+    try:
+        response = requests.get('https://uinames.com/api/?ext', timeout=5)
+        response.raise_for_status()  # this line will raise an HTTPError if the response was unsuccessful
+        data = response.json()
+        return data['name'] + ' ' + data['surname']
 
-    def set_level(self, level):
-        log_level = getattr(logging, level.upper(), None)
-        if not isinstance(log_level, int):
-            raise ValueError('Invalid log level: %s' % level)
-        self.logger.setLevel(log_level)
+    except requests.exceptions.RequestException as e:
+        print(f"Request to uinames API failed: {e}")
+        return "Winfo"
 
-    def get_logger(self):
-        return self.logger
-
-
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return "Winfo"

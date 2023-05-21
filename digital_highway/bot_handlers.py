@@ -1,3 +1,5 @@
+import functools
+
 class MessageHandler:
     def handle_message(self, message, bot):
         # TODO: Implement message handling logic here
@@ -14,7 +16,6 @@ class MessageHandler:
             # TODO: Handle the data as per your application requirements
             pass
 
-
 class ConnectionHandler:
     def handle_connection(self, connection, bot):
         # TODO: Implement connection handling logic here
@@ -25,6 +26,20 @@ class ConnectionHandler:
             bot.logger.info(f"Received a connection from {connection.owner}")
 
 class GeneralHandler:
+    @functools.singledispatchmethod
     def handle_stuff(self, stuff):
-        #TODO : Implement some general methods for doing stuff
-        pass
+        print(f"Received an object of type {type(stuff).__name__} in GeneralHandler: {stuff}")
+        # Default handling logic for other types of data goes here
+        return f"GeneralHandler received: {stuff}"
+
+    @handle_stuff.register
+    def _(self, stuff: str):
+        print(f"Received a string in GeneralHandler: {stuff}")
+        # Further logic for handling string goes here
+        return f"GeneralHandler received a string: {stuff}"
+
+    @handle_stuff.register
+    def _(self, stuff: dict):
+        print(f"Received a dictionary in GeneralHandler: {stuff}")
+        # Further logic for handling dictionary goes here
+        return f"GeneralHandler received a dictionary: {stuff}"

@@ -1,5 +1,7 @@
 import datetime
 import utils
+import threading
+import uuid
 
 class Config:
     DEFAULT_CONFIG_SELF = {}
@@ -56,3 +58,33 @@ class Config:
     def __str__(self):
         safe_settings = {k: '***' if k.lower().endswith('password') else v for k, v in self.settings.items()}
         return f'Config({safe_settings})'
+
+
+class DefaultBotConfig:
+    REQUIRED_KEYS = ['id', 'inventory', 'logger', 'lock', 'port', 'state', 'memory', 'brain']
+    DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'inventory': lambda: {'items': []},
+        'lock': lambda: threading.Lock(),
+        '_created_at': lambda: datetime.datetime.now(),
+        '_updated_at': lambda: datetime.datetime.now(),
+        '_parent': lambda: None,
+        '_logger_level': 'DEBUG',
+        '_restricted_config_keys': lambda: {'id', 'port', 'state', 'memory', 'logger', 'lock'},
+        'is_thinking': False,
+        'is_updating': False,
+        'is_active': True,
+        'has_controller': False,
+    }
+
+    def __init__(self, custom_config=None):
+        self.config = self.DEFAULT_CONFIG.copy()
+        if custom_config:
+            self.config.update(custom_config)
+        self._verify_config()
+
+    def _verify_config(self):
+        for key in self.REQUIRED_KEYS:
+            if key not in self.config:
+                raise ValueError(f"Missing required config key: {key}")
+
