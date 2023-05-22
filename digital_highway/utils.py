@@ -26,7 +26,7 @@ def thread_safe_method(method):
             return method(self, *args, **kwargs)
     return _method
 
-def setup_logger(target, level='INFO'):
+def setup_logger(target, level=None):
     # Create logs directory if not exists
     if not os.path.exists('logs'):
         os.makedirs('logs')
@@ -43,7 +43,12 @@ def setup_logger(target, level='INFO'):
     singleton_logger = SingletonLogger(target.__class__.__name__)
     logger = singleton_logger.get_logger()
 
-    level = level.upper()
+    # Set level
+    if level:
+        singleton_logger.set_level(level)
+    else:
+        singleton_logger.set_level('INFO')
+
     level_dict = {
         'DEBUG': logging.DEBUG,
         'INFO': logging.INFO,
@@ -116,6 +121,14 @@ def update_config(target, config):
             continue
         setattr(target, key, value() if callable(value) else value)
 
+def run_config(target, config):
+    # Sets up the target's config - can be used to set up default config or to override it
+    restricted_keys = getattr(target, '_restricted_config_keys', set())
+    for key, value in config.items():
+        if key.startswith('_') or key in restricted_keys:
+            target.logger.warning(f"Restricted key {key} in {type(target).__name__} config. Skipping.")
+            continue
+        setattr(target, key, value() if callable(value) else value)
 
 def verify_config(target, config):
     # Verify that all required keys are present in the config of the target

@@ -75,7 +75,7 @@ class Hub():
         if not self.bots:
             raise RuntimeError("No bots connected to the hub to broadcast data")
         for bot in self.bots:
-            bot.receive(data)
+            bot.receive(self, data)
 
     def receive(self, data, source_port):
         if not isinstance(source_port, Port):
@@ -89,6 +89,17 @@ class Hub():
 
     def handle(self, data, source):
         print(f"Hub received data from {source.id}: {data}")
+
+    def create_bots(self, num_bots):
+        for i in range(num_bots):
+            bot = Bot()
+            self.add_bot(bot)
+
+    def identify(self):
+        print(f"Hub {self.port.address} identified")
+
+    def run(self):
+        self.identify()
 
     def __str__(self):
         return f"Hub {self.port.address}"

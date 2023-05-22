@@ -1,7 +1,55 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict
 from datetime import datetime
+from abc import ABC
+from typing import Dict, Any
 from utils import generate_unique_id
+
+
+class EventLog:
+    def __init__(self):
+        self.history = []
+
+    def add_entry(self, entry):
+        self.history.append((datetime.now(), entry))
+
+    def __str__(self):
+        return str(self.history)
+
+    def __repr__(self):
+        return str(self.history)
+
+    def __iter__(self):
+        return iter(self.history)
+
+    def __getitem__(self, index):
+        return self.history[index]
+
+    def __len__(self):
+        return len(self.history)
+
+    def __contains__(self, item):
+        return item in self.history
+
+    def __reversed__(self):
+        return reversed(self.history)
+
+    def __add__(self, other):
+        return self.history + other
+
+    def __radd__(self, other):
+        return other + self.history
+
+class Event(ABC):
+    def __init__(self, payload: str):
+        self._id = generate_unique_id()
+        self._payload = payload
+        self._timestamp = datetime.now()
+        self._log = EventLog()
+        self._metadata: Dict[str, Any] = {}
+
+    @property
+    def log(self):
+        return self._log.history
+
 
 class Event(ABC):
     def __init__(self, payload: str):

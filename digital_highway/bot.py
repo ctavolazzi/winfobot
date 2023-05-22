@@ -4,11 +4,11 @@ from state import State
 from memory import Memory
 from bot_behaviors import Behavior, BehaviorHandler, BehaviorFactory
 from typing import Any, Dict, List, Union
-from events import EventQueue, EventHandler
-from events import MessageEvent, CommandEvent
-from threaded_brain import ThreadedBrain
+from event_queue import EventQueue
+from handlers import CommandEventHandler, EventHandler, MessageEventHandler, MessageHandler, ConnectionHandler, GeneralHandler
+from events import Event, MessageEvent, CommandEvent
+from brains import ThreadedBrain
 from formatters import BaseFormatter, JSONFormatter
-from bot_handlers import MessageHandler, ConnectionHandler, GeneralHandler
 from config import DefaultBotConfig
 import asyncio
 import utils
@@ -23,7 +23,7 @@ class Bot:
         self.type = self.__class__.__name__
         self.base_type = self.__class__.__name__
         self.formatter = JSONFormatter(self)
-        self.q = EventQueue(EventHandler)
+        self.q = EventQueue()
 
         # Bind the class instances
         self.port = Port({'owner': self}) if not hasattr(self, 'port') else self.port
