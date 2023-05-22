@@ -21,14 +21,14 @@ class Hub(Bot):
     }
 
     def __init__(self, config=None):
-        self.run_default_config()
-        self.logger = utils.setup_logger(self, 'DEBUG')
+        super().__init__(config)  # Call Bot's initializer
 
-        self.port = Port({'owner': self})
+        # Additional setup for Hub
         self.bots = set()
+        self.run_default_config()
 
         if config:
-            self.run_config(config)
+            utils.update_config(self, config)
 
         if not isinstance(self.rules, dict):
             raise TypeError("Rules should be a dictionary")
@@ -71,21 +71,22 @@ class Hub(Bot):
         # TODO: implement rule checking
         return True
 
-    def broadcast(self, data):
+    async def broadcast(self, data):
         if not self.bots:
             raise RuntimeError("No bots connected to the hub to broadcast data")
         for bot in self.bots:
-            bot.receive(self, data)
+            await self.send(data, bot)
 
-    def receive(self, data, source_port):
-        if not isinstance(source_port, Port):
-            raise TypeError("Data source should be an instance of Port")
-
-        source = source_port.owner
-        if self._check_rules(source): # Assuming 'owner' is a bot.
-            self.handle(data, source)
+    async def receive(self, data, source):
+        if isinstance(source.port, Port):
+            source = source.port.owner
+            self.logger.info(f"Hub {self.id} received data from {source.id}: {data}")
+            if self._check_rules(source):
+                await self.handle(data, source)
+            else:
+                print(f"Bot {source.id} is not following the rules. Data not accepted.")
         else:
-            print(f"Bot {source.id} is not following the rules. Data not accepted.")
+            raise TypeError("Data source should be an instance of Port")
 
     def handle(self, data, source):
         print(f"Hub received data from {source.id}: {data}")
@@ -118,11 +119,12 @@ if __name__ == '__main__':
     assert len(hub.bots) == 2, "Bots were not added correctly"
 
     # Test broadcasting data
-    hub.broadcast("Test data")
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(hub.broadcast("Test data"))
     # Both bots should have received the data
 
     # Test receiving data
-    hub.receive("Test data from bot1", bot1.port)
+    loop.run_until_complete(hub.receive("Test data from bot1", bot1))
     # The hub should have handled the data
 
     # Test removing a bot
