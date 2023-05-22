@@ -51,12 +51,12 @@ class Bot:
         if isinstance(event, MessageEvent):
             await self.message_handler.handle_message(event.message, self)
         elif isinstance(event, CommandEvent):
-            self.execute(event.command, *event.args)
+            await self.execute(event.command, *event.args)
 
-    def execute(self, command, *args):
+    async def execute(self, command, *args):
         try:
             if hasattr(self, command):
-                getattr(self, command)(*args)
+                await getattr(self, command)(*args)
                 self.logger.info(f"Executed command: {command}")
             else:
                 self.logger.error(f"Unknown command: {command}")
@@ -85,7 +85,7 @@ class Bot:
             raise TypeError("Formatter should be a subclass of BaseFormatter")
 
     async def send(self, data, destination):
-        formatted_data = self.formatter.format(data)
+        formatted_data = await self.formatter.format(data)
         if isinstance(destination, Port):
             await destination.receive(formatted_data)
         elif isinstance(destination, Bot):
@@ -108,9 +108,9 @@ class Bot:
     def identify(self):
         pprint.pprint(self.__dict__)
 
-    def echo_data(self, data, source):
+    async def echo_data(self, data, source):
         # Echo back to source
-        self.send(data, source)
+        await self.send(data, source)
 
     def __iter__(self):
         for attr, value in self.__dict__.items():
@@ -145,8 +145,8 @@ def main():
 
     print("\nConnecting Bot1 and Bot2...")
     bot1.port.connect(bot2.port)
-    assert bot2.port in bot1.port.connections, "Bot2's port should be in Bot1's port connections."
-    assert bot1.port in bot2.port.connections, "Bot1's port should be in Bot2's port connections."
+    assert bot2.port in bot1.port.get_connections(), "Bot2's port should be in Bot1's port connections."
+    assert bot1.port in bot2.port.get_connections(), "Bot1's port should be in Bot2's port connections."
 
     print("\nSetting Formatter for Bot1 and Bot2...")
     bot1.set_formatter(JSONFormatter)
@@ -161,9 +161,8 @@ def main():
 
     print("\nDisconnecting Bot1 and Bot2...")
     bot1.port.disconnect(bot2.port)
-    assert bot2.port not in bot1.port.connections, "Bot2's port should not be in Bot1's port connections after disconnecting."
-    assert bot1.port not in bot2.port.connections, "Bot1's port should not be in Bot2's port connections after disconnecting."
-
+    assert bot2.port not in bot1.port.get_connections(), "Bot2's port should not be in Bot1's port connections after disconnecting."
+    assert bot1.port not in bot2.port.get_connections(), "Bot1's port should not be in Bot2's port connections after disconnecting."
 
 if __name__ == "__main__":
     main()

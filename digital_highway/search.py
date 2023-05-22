@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
+from bot import Bot
 
 class Search(ABC):
     @abstractmethod

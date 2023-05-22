@@ -31,10 +31,10 @@ def test_bot_identify():
     hub.create_bots(1)
 
     # Let's say the bot's id is generated as "Bot_1" on creation
-    expected_id = hub.bots[0].id  # we don't know it beforehand but we will compare with this
+    expected_id = hub.get_bot(0)  # we don't know it beforehand but we will compare with this
     # Change the bot's name
     new_name = "TestBot"
-    hub.bots[0].name = new_name
+    hub.bot.get_bot("TestBot")
 
     # Assume that identify method returns the bot's id and name
     actual_id, actual_name = hub.bots[0].identify()

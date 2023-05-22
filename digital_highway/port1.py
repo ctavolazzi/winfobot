@@ -1,21 +1,98 @@
-import utils
-import bcrypt
-import threading
 import uuid
+import utils
+import threading
 from message import Message
-from managers import MessageManager, ConnectionManager
-from handlers import Handler, MessageHandler, ConnectionRequestHandler, CommandHandler, EventHandler, MessageEventHandler, CommandEventHandler, GeneralHandler, HandlerFactory
-from errors import InvalidDestinationError, UnconnectedDestinationError, UnhandledTypeError, ConnectionError, PortError
-from typing import Optional
-from utils import thread_safe_method, setup_logger, update_config, hash, verify_hash, get_config
+import bcrypt
+import secrets
 
 class ConnectionRequest:
     def __init__(self, source_port, token):
         self.source_port = source_port
-        self.token = token # The token is now a string
+        self.token = token
 
-    def __str__(self):
-        return f"ConnectionRequest(source_port={self.source_port}, token={self.token})"
+class UnconnectedDestinationError(Exception):
+    pass
+
+class UnhandledTypeError(Exception):
+    pass
+
+class InvalidDestinationError(Exception):
+    pass
+
+class ConnectionError(Exception):
+    pass
+
+class ConnectionManager:
+    def __init__(self, port):
+        self.port = port
+        self.connections = set()
+
+    def connect(self, target):
+        if target in self.connections:
+            raise ConnectionError(f"{target.__class__.__name__ + ' ' + target.id} is already connected to Port {self.port.address}")
+        elif target is self.port._owner:
+            raise ConnectionError(f"Cannot connect {target.__class__.__name__ + ' ' + target.id} to Port {self.port.address}. It is the owner.")
+        elif target is None:
+            raise ConnectionError(f"Cannot connect None to Port {self.port.address}.")
+        elif target is self.port:
+            raise ConnectionError(f"Cannot connect Port {self.port.address} to itself.")
+        # Else if it passes the verification it will be added to the connections list
+        else:
+            # Create a connection request with a token
+            token = secrets.token_hex(16)
+            request = ConnectionRequest(self.port, token)
+            if target.handle_connection_request(request):
+                self.connections.add(target)
+                self.port.logger.info(f"{target.__class__.__name__ + ' ' + target.id} has been connected to Port {self.port.address}")
+            else:
+                raise ConnectionError(f"Could not connect {target.__class__.__name__ + ' ' + target.id} to Port {self.port.address}.")
+        return self
+
+
+    def disconnect(self, target):
+        if target in self.connections:
+            self.connections.remove(target)
+            self.port.logger.info(f"{target.__class__.__name__ + ' ' + target.id} has been disconnected from Port {self.port.address}")
+        else:
+            raise ConnectionError(f"{target.__class__.__name__ + ' ' + target.id} is not connected to Port {self.port.address}")
+        return self
+
+class MessageManager:
+    _REQUIRED_CONFIG_KEYS = ['id', 'logger', 'lock', 'port']
+
+    _DEFAULT_CONFIG = {
+        'id': lambda: str(uuid.uuid4()),
+        'lock': lambda: threading.Lock(),
+        '_port': None,
+        '_messages': lambda: set(),
+        '_logger_level': 'DEBUG'
+    }
+
+    def __init__(self, port):
+        utils.run_default_config(self, self._DEFAULT_CONFIG)
+        utils.verify_config(self, self._REQUIRED_CONFIG_KEYS)
+        self._port = port
+        self.logger = utils.setup_logger(self)
+        self.logger.info(f'Initialized {self.__class__.__name__} {self.id} for Port {self._port.id}')
+
+    def receive(self, message: Message):
+        if not isinstance(message, Message):
+            raise TypeError("The 'message' parameter should be an instance of the 'Message' class.")
+        with self.lock:  # Acquire the lock
+            self._messages.add(message)
+            self.logger.info(f'Message received at Port {self._port.id}.')
+
+    def send(self, content, destinations):
+        if isinstance(destinations, Port):
+            destinations = [destinations]  # Encapsulate single destination in list for compatibility
+
+        for destination in destinations:
+            if destination in self._port._connection_manager.connections:
+                message = Message(source=self._port, content=content, destination=destination)
+                destination.receive(message)
+                self.logger.info(f'Message sent from Port {self._port.id} to {destination.id}.')
+            else:
+                raise InvalidDestinationError(f"Cannot send message. Destination Port {destination.id} is not connected.")
 
 class Port:
     _REQUIRED_CONFIG_KEYS = ['id', 'address', 'logger', 'lock', 'handlers']
@@ -63,14 +140,16 @@ class Port:
         self.logger.debug(f'Initialized logger for {self.__class__.__name__} {self.id}')
 
     def _change_password(self, old_password, new_password):
-        # Verify the old password
+        # Verify the old password:
         if bcrypt.checkpw(old_password.encode(), self._hashed_password):
-            # Check strength of the new password
+            # Check strength of the new password (this is a simplified check):
             if len(new_password) < 8 or not any(char.isdigit() for char in new_password):
                 raise ValueError("New password is not strong enough.")
+            # Reject common passwords (here you would check against a full list):
             if new_password in ["password", "12345678"]:
                 raise ValueError("New password is too common.")
-            # Once the new password is verified, you can hash it and update the _hashed_password attribute
+            # Once the new password is verified, you can hash it and update the _hashed_password attribute.
+            # Here we're using bcrypt for hashing, and a salt for additional security.
             salt = bcrypt.gensalt()
             self._hashed_password = bcrypt.hashpw(new_password.encode(), salt)
             self.logger.info("Password changed successfully.")

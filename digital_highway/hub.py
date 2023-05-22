@@ -3,6 +3,7 @@ from port import Port
 import utils
 from message import Message
 import uuid
+import asyncio
 
 class Hub(Bot):
     DEFAULT_CONFIG_SELF = {
@@ -76,6 +77,46 @@ class Hub(Bot):
             raise RuntimeError("No bots connected to the hub to broadcast data")
         for bot in self.bots:
             await self.send(data, bot)
+
+    def request_data(self, bot, api_request):
+        # Check if the bot is connected
+        if bot not in self.bots.values():
+            print(f"Bot {bot.id} is not connected to the hub.")
+            return
+
+        # Validate and format the API request
+        api_request = self._validate_and_format_request(api_request)
+
+        # Send the API request through the port
+        api_response = self.port.connect(api_request)
+
+        # Process the API response
+        api_response = self._process_response(api_response)
+
+        # Send the processed data back to the bot
+        bot.receive(self, api_response)
+
+    def pass_data(self, sender_bot, recipient_bot, data):
+        # Check if the sender bot is connected
+        if sender_bot not in self.bots.values():
+            print(f"Bot {sender_bot.id} is not connected to the hub.")
+            return
+
+        # Check if the recipient bot is connected
+        if recipient_bot not in self.bots.values():
+            print(f"Bot {recipient_bot.id} is not connected to the hub.")
+            return
+
+        # Validate and format the data
+        data = self._validate_and_format_data(data)
+
+    def _validate_and_format_request(self, api_request):
+        # TODO: Validate and format the API request
+        return api_request
+
+    def _process_response(self, api_response):
+        # TODO: Process the API response
+        return api_response
 
     async def receive(self, data, source):
         if isinstance(source.port, Port):

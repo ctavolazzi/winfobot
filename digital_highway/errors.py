@@ -25,6 +25,8 @@ class ConnectionError(Error):
     """
     pass
 
+class PortError(Exception):
+    pass
 
 class AuthenticationError(Error):
     """
