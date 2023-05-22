@@ -1,19 +1,29 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 class Search(ABC):
     @abstractmethod
     def search(self, target, term):
         pass
 
-class AttributeSearch(Search):
+class EqualitySearch(Search):
     def search(self, target, term):
-        attribute, value = term
+        return [obj for obj in target if any(getattr(obj, attr, None) == term for attr in vars(obj))]
 
-        if not attribute or not value:
-            return None
+class ContainsSearch(Search):
+    def search(self, target, term):
+        return [obj for obj in target if any(term in str(getattr(obj, attr, '')) for attr in vars(obj))]
 
-        for item in target:
-            if hasattr(item, attribute) and getattr(item, attribute) == value:
-                return item
+class SearchManager:
+    def __init__(self):
+        self.strategies = {
+            str: ContainsSearch(),
+            Bot: EqualitySearch(),
+        }
 
-        return None
+    def search(self, target, term):
+        strategy = self.strategies.get(type(term))
+        if strategy:
+            return strategy.search(target, term)
+        else:
+            raise ValueError(f"No search strategy found for type: {type(term)}")

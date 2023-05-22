@@ -4,7 +4,7 @@ import utils
 from message import Message
 import uuid
 
-class Hub():
+class Hub(Bot):
     DEFAULT_CONFIG_SELF = {
         'type': lambda self: self.__class__.__name__,
         '_base_type': lambda self: self.__class__.__name__,
